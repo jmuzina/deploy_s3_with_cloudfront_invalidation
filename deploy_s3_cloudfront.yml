@@ -1,0 +1,53 @@
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        description: Env name
+        type: string
+        default: "prod"
+    secrets:
+      AWS_S3_BUCKET_NAME:
+        required: true
+        description: Name of the S3 bucket to upload static web build artifacts to
+      AWS_ACCESS_KEY_ID:
+        required: true
+        description: AWS IAM Access Key ID for accessing resources
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+        description: AWS IAM Secret Access Key for accessing resources
+      AWS_CLOUDFRONT_DISTRIBUTION_ID:
+        required: true
+        description: ID of the Cloudfront Distribution used by this artifact
+      AWS_REGION:
+        required: true
+        description: AWS deployment region
+jobs:
+  deploy:
+    name: Build
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Download artifact from last successful CI run
+        uses: actions/download-artifact@v4
+        with:
+          name: jmuzina-${{ github.event.repository.name }}-${{ inputs.environment }}-${{ github.run_number }}
+
+      - name: Deploy to S3
+        uses: jakejarvis/s3-sync-action@v0.5.1
+        with:
+          args: --acl public-read --follow-symlinks --delete
+        env:
+          AWS_S3_BUCKET: ${{ secrets.AWS_S3_BUCKET_NAME }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+
+      - name: Invalidate CloudFront Distribution
+        uses: chetan/invalidate-cloudfront-action@v1
+        env:
+          DISTRIBUTION: ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID }}
+          PATHS: '/*'
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
